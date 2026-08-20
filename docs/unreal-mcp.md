@@ -49,7 +49,7 @@ As of commit `9dcb623af8451b3026bb355a27712e0f8e98bb1a` on 2026-08-20:
 - it includes deeper Blueprint graph, migration, component, animation, material, AI, PCG, GAS, networking, Sequencer, and editor-workflow operations than the currently enabled native toolset;
 - it remains an actively developed internal tool, not a production-hardened replacement for Epic's integration.
 
-The custom plugin is not yet installed in ResidentHorrorV1. Installing it will add a native C++ editor module and several engine-plugin dependencies to this currently Blueprint-only project. That integration must be performed as a focused change with an explicit source-management strategy; do not copy a dirty working directory into `Plugins/` or commit generated `Binaries/` and `Intermediate/` content.
+The custom plugin is installed in `Plugins/ClaudeUnrealMCP/` and enabled in `ResidentHorrorV1.uproject` alongside required engine plugins (`Chooser`, `StructUtils`, `EditorScriptingUtilities`, `StateTree`, `ProceduralMeshComponent`). Loading the C++ editor module into Unreal Editor requires launching/restarting Unreal Editor with the project. Generated folders (`Binaries/`, `Intermediate/`, `node_modules/`) are gitignored.
 
 Known custom-MCP maintenance concerns include:
 
@@ -105,7 +105,8 @@ The enabled `EditorToolset` provides tools for:
 - Tool calls execute serially on Unreal's game thread. Large searches or batches can temporarily stall the editor.
 - The server is unauthenticated and intended only for loopback access. Never expose port `8000` to another machine or a public network.
 - Shipping toolsets advertise Tools only; they do not advertise MCP Resources or Prompts.
-- Only the core `EditorToolset` family is enabled. There are no dedicated AI/Behavior Tree, UMG, Niagara, animation/Control Rig, audio, Game Features, or automation-test tools. Generic asset and Blueprint inspection may offer partial access, but not the same semantic editing support.
+- The core `EditorToolset` family and the dedicated `UMGToolSet` are enabled. There are no dedicated AI/Behavior Tree, Niagara, animation/Control Rig, audio, Game Features, or automation-test tools. Generic asset and Blueprint inspection may offer partial access, but not the same semantic editing support.
+- `UMGToolSet` owns semantic WidgetTree operations: listing and describing trees/classes, creating Widget Blueprints and child widgets, moving/wrapping/removing/renaming widgets, toggling `Is Variable`, binding widget events, accessing returned slot objects, and compiling Widget Blueprints. Use `ObjectTools.list_properties` before reading or setting properties on returned widget and slot objects; use `BlueprintTools` for the Widget Blueprint Event Graph and `AssetTools` for focused saves.
 - MCP can start and stop PIE, but the enabled tools do not inject player keyboard or mouse input. Combat, inventory, interaction, UI navigation, and save/load flows still require manual playtesting or purpose-built automation.
 - World Partition actor searches operate on the current editor scene. Actors in unloaded cells may not be visible until their cells are loaded.
 - Missing vendor content cannot be recovered through MCP. In particular, the absent `/Game/WWG_ZombieLite/Blueprints/BP_ZombieLite` class must be restored from its source or its unknown actors deliberately removed.
@@ -134,7 +135,7 @@ Use these checks in order:
 4. From the Unreal console, run `ModelContextProtocol.StartServer 8000` if the server was not started.
 5. Run `ModelContextProtocol.RefreshTools` after enabling or changing toolsets.
 6. Confirm `.codex/config.toml` contains the `unreal-mcp` URL and reconnect or restart the local MCP client after an editor restart when necessary.
-7. Call `list_toolsets`; the result should include `EditorToolset.EditorAppToolset`, `ActorTools`, `AssetTools`, `BlueprintTools`, `ObjectTools`, and `SceneTools`.
+7. Call `list_toolsets`; the result should include `EditorToolset.EditorAppToolset`, `ActorTools`, `AssetTools`, `BlueprintTools`, `ObjectTools`, `SceneTools`, and `UMGToolSet.UMGToolSet`.
 8. Use a harmless read call such as `IsPIERunning`, `GetContentBrowserPath`, or `GetSelectedActors` as the final smoke test.
 
 For protocol-level debugging, Epic recommends the MCP Inspector against `http://127.0.0.1:8000/mcp` using Streamable HTTP.
@@ -147,7 +148,9 @@ Do not use UI automation for terminal commands, broad asset saves, binary-file m
 
 ## Adding more toolsets
 
-Enable specialized toolsets individually when a real task requires them. Likely candidates for this template are `AIModuleToolset`, `UMGToolSet`, `NiagaraToolsets`, `AnimationAssistantToolset`, and `AutomationTestToolset`.
+Enable specialized toolsets individually when a real task requires them. `UMGToolSet` was enabled after the FPV pose-tuner layout demonstrated a concrete WidgetTree automation need. Other likely candidates for this template are `AIModuleToolset`, `NiagaraToolsets`, `AnimationAssistantToolset`, and `AutomationTestToolset`.
+
+Epic's `UMGToolSet` covers the WidgetTree operations that previously required slow visible automation: it can list the tree, create/remove children by class, wrap/reparent/reorder children, rename widgets, toggle `Is Variable`, return panel-slot objects for property editing, and compile the Widget Blueprint. Prefer it for future UMG construction. Only extend the custom MCP if a concrete workflow remains missing after using these native operations; do not duplicate the native toolset wholesale.
 
 Evaluate each plugin's dependencies and startup warnings before keeping it enabled. Avoid enabling `AllToolsets` merely for convenience; it broadens the editor surface, adds irrelevant dependencies, and makes the available tool catalog harder to control.
 

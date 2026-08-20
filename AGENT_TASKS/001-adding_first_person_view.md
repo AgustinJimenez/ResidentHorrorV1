@@ -364,6 +364,46 @@ After the user reported hand and gun camera clipping while crouch-walking and lo
 
 The full interaction, equipped-weapon, flashlight, inspection, ladder, teleport, save/load, and packaged-build regression matrix remains follow-up validation; those flows were routed and compiled but were not all exercised in this smoke test.
 
+## First-person hand-pose tuning: 2026-08-20
+
+The first tuning pass reuses the existing weapon-pose control instead of adding a competing skeletal-control chain. `/Game/ResidentHorrorV1/Demo/ABP_Character/ABP_Player` copies the player's `Hand Cliping Rotation` and applies it additively in component space to `upperarm_r` and `upperarm_l`.
+
+- Added instance-editable rotator `FirstPersonHandPoseRotation` to `/Game/ResidentHorrorV1/Character/BP_Character/BP_Resident_HorrorV1` under `Camera|First Person`.
+- Its initial value is `(Pitch=0, Yaw=6, Roll=0)`; positive yaw shifts the held hands and weapon toward screen-right.
+- While `FirstPersonCamera` is active, `Cliping On` interpolates `Hand Cliping Rotation` toward that target every frame at speed `10`.
+- When third person is active, the original wall-clipping/reset flow interpolates the value back to zero. No third-person animation pose or Animation Blueprint asset was changed.
+- The upper-arm correction is placed after the weapon/flashlight pose selections so equipped weapons cannot bypass it. Weapon-specific presentation should still use a later additive/layered-per-bone pose if the shared rotator is insufficient.
+
+The player Blueprint compiles and saves without errors. Normal-player-start PIE confirmed third-person startup, first-person entry, crouching, and restoration of the crouched third-person view after toggling back. A separate floating PIE attempt with a spawn override beside a pistol could not validate the equipped view because collision prevented the pawn from spawning; the log contained only that spawn warning plus the template's known duplicate-slot, missing-item-mesh, and navmesh warnings. The exact pistol-equipped crouch-walk/look-down result therefore remains a user validation item.
+
+## Isolated FPV pose lab: 2026-08-20
+
+Created the development-only map `/Game/ResidentHorrorV1/Maps/Dev/Map_FPV_PoseLab` from Unreal's basic template map and gave it a World Settings override to `/Game/ResidentHorrorV1/Character/BP_Character/Game/BP_PlayerModeResidentHorror`. The map is independent of `Map_MechanicMap` and contains the reusable actor `/Game/ResidentHorrorV1/Blueprints/Dev/BP_FPV_PoseLabHarness`.
+
+The harness uses the real gameplay paths rather than a preview-only animation:
+
+- obtains the normal `BP_Resident_HorrorV1` player;
+- calls `Equip Weapon Player` with `/Game/ResidentHorrorV1/Blueprints/BP_Weapon/PickUp/HandGun/BP_Pistol`;
+- crouches the character and calls `SetCameraMode(true)`;
+- adds movement input every frame and reverses direction at signed X displacement `-WalkRadius` and `+WalkRadius`;
+- exposes instance-editable `AutoWalk`, `WalkRadius`, and `WalkInputScale`, defaulting to `true`, `300`, and `0.5`.
+
+PIE runtime inspection confirmed `bIsFirstPerson=true`, `bIsCrouched=true`, equipped weapon `BP_Pistol_C_0`, `FirstPersonHandPoseRotation=(0,6,0)`, matching `Hand Cliping Rotation=(0,6,0)`, and repeated traversal of the `600` cm lane. The first distance implementation included crouch-height Z and oscillated at one boundary; the final implementation uses signed X displacement and correctly reverses at both ends. The existing unmatched-switch warning remains unrelated.
+
+Runtime comparisons at `(Pitch=-4, Yaw=12, Roll=0)` and `(Pitch=-8, Yaw=20, Roll=0)` showed that the existing shared upper-arm rotator primarily changes weapon angle and does not provide enough lateral displacement. The next tuning implementation should therefore add first-person-only translation or an additive upper-body pose rather than continuing to increase yaw.
+
+### Live translation/rotation tuner
+
+Implemented the next tuning pass with no third-person pose change:
+
+- Added instance-editable vector `FirstPersonHandPoseTranslation`, default `(X=-8.435, Y=17.298, Z=16.190)`, beside `FirstPersonHandPoseRotation`, default `(Pitch=0.0, Yaw=6.0, Roll=7.705933)`, in `/Game/ResidentHorrorV1/Character/BP_Character/BP_Resident_HorrorV1`.
+- `Cliping On` interpolates `Hand Cliping Location` toward the translation target only while first person is active and back to zero in third person; its existing first-person rotation and third-person clipping behavior remain intact.
+- `/Game/ResidentHorrorV1/Demo/ABP_Character/ABP_Player` now feeds `Hand Cliping Location` into the additive component-space translation input of the existing `upperarm_r` and `upperarm_l` Modify Bone nodes. These two nodes run after the `Using Weapon?` and flashlight pose selections so the equipped pistol path receives the correction.
+- Added `/Game/ResidentHorrorV1/Blueprints/Dev/WBP_FPV_PoseTuner`. Its six live sliders are arranged as separate rows with a fixed-width label on the left: translation X/Y/Z (`-75..75`) and rotation pitch/yaw/roll (`-45..45` degrees). The compact, half-width tracks use a `10`-unit bar thickness with dark bars and green handles, the header retains an exact live value readout, each slider has an axis/range tooltip, and yaw initializes to `6`. A `Reset` button restores translation `(0,0,0)` and rotation `(0,6,0)` without restarting PIE.
+- `BP_FPV_PoseLabHarness` creates the tuner at PIE start, enables the mouse cursor and Game-and-UI input, and leaves the automatic crouch-walk/pistol setup running behind it.
+
+PIE validation in `Map_FPV_PoseLab` confirmed that the panel, cursor, axis tooltips, pistol, crouched first-person state, and auto-walk all appear together. A follow-up test found that the first graph placement was upstream of `Blend Poses by Bool (Using Weapon?)`; the equipped pistol selected the other pose and completely bypassed the slider-driven nodes even though the runtime values and pins were correct. Moving the two upper-arm Modify Bone nodes after the weapon/flashlight selections fixed the fault. At Y approximately `-73` the weapon exits the view, while at Y approximately `+73` the pistol and both hands move clearly into view, proving useful full-range response. The Reset flow was separately verified by changing Translation X to approximately `67` and restoring the full default translation and rotation in one click. Tuned values `(X=-8.435, Y=17.298, Z=16.190)` and `(Pitch=0.0, Yaw=6.0, Roll=7.705933)` were applied directly to the player Blueprint Class Defaults and saved.
+
 ## Definition of done for the first slice
 
 - [x] Third person remains the default and its existing camera/spring-arm defaults are intact.
@@ -373,7 +413,8 @@ The full interaction, equipped-weapon, flashlight, inspection, ladder, teleport,
 - [x] The focused camera/crouch smoke test passes in `Map_MechanicMap`.
 - [x] Known presentation and regression-test limitations are documented.
 - [x] Project documentation records the final assets, dependencies, and validation result.
-- [x] No custom MCP source change or new plugin dependency was required.
+- [x] No custom MCP source change or third-party plugin dependency was required.
+- [x] Epic's bundled `UMGToolSet` was enabled for future semantic WidgetTree construction after the tuner layout exposed the cost of manual UMG UI automation; no custom MCP duplication was needed.
 - [x] The three unrelated external-actor deletions remain outside this feature.
 
 ## Follow-up decisions
@@ -381,7 +422,7 @@ The full interaction, equipped-weapon, flashlight, inspection, ladder, teleport,
 - Decide whether first-person mode should persist in save data; it currently resets to third person on spawn/load.
 - Evaluate UE 5.8 First Person Rendering for arms/weapons while retaining the full-body mesh and complete character shadow.
 - Retest holding a gun while crouch-walking and looking down at the exact zero-offset `CameraSocket`; if clipping remains, implement the separate first-person arm/weapon presentation rather than another camera-position workaround.
-- Implement first-person-only hand-pose tuning in `/Game/ResidentHorrorV1/Demo/ABP_Character/ABP_Player`: pass in `bIsFirstPerson`, gate an additive upper-body/layered-per-bone correction on that value, preserve the existing third-person branch unchanged, apply weapon-specific grip offsets as needed, and run support-hand IK after the correction. Validate hip fire, aim, crouch, movement, reload, and steep look-down angles for each weapon class.
+- If the shared `FirstPersonHandPoseRotation` cannot cover all weapons and states, implement the second-stage first-person-only correction in `/Game/ResidentHorrorV1/Demo/ABP_Character/ABP_Player`: gate an additive upper-body/layered-per-bone pose on first-person state, preserve the existing third-person branch, apply weapon-specific grip offsets, and run support-hand IK after the correction. Validate hip fire, aim, crouch, movement, reload, and steep look-down angles for each weapon class.
 - Tune camera offsets, weapon alignment, recoil, reload, flashlight, lean, and animation stabilization after the full regression matrix.
 - Decide whether door transitions or future cinematics require additional camera-mode guards.
 - Perform an interaction/door, equipped-weapon, ladder, inspection, teleport, UI, save/load, and packaged-build validation pass before calling the broader feature production-ready.

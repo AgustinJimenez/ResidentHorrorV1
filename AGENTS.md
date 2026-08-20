@@ -12,6 +12,7 @@ Treat this file as a living map of the repository. Update it when a system, star
 
 - Open `ResidentHorrorV1.uproject` with Unreal Engine 5.8 for continued work on this converted checkout. Unreal Engine 5.7 is the template's original authoring version.
 - The expected editor and game startup map is `/Game/ResidentHorrorV1/Maps/Map_MechanicMap`.
+- The isolated first-person weapon-pose test map is `/Game/ResidentHorrorV1/Maps/Dev/Map_FPV_PoseLab`; it is development-only and must not replace either configured startup map.
 - `DefaultEngine.ini` currently points the default game mode at `/Game/ResidentHorrorV1/Character/BP_Character/Game/BP_PlayerMode`, but that asset is absent. The existing likely replacement is `BP_PlayerModeResidentHorror`; see Known Issues before changing the config.
 - The configured game instance is `/Game/ResidentHorrorV1/Blueprints/BP_Core/ResidentHorrorV1_GameInstance`.
 - Use Play In Editor from `Map_MechanicMap` for the primary smoke test.
@@ -44,7 +45,7 @@ The following map is based on current asset paths and names. Blueprint graphs re
 
 The detailed feature inventory, asset anchors, known gaps, and system-by-system PIE validation paths are maintained in `docs/gameplay-systems.md`. Update that document when a gameplay capability is added, removed, verified, or found to be incomplete.
 
-- Player/game framework: `Character/BP_Character/BP_Resident_HorrorV1`, `BP_PlayerControllerResidentHorror`, `BP_PlayerModeResidentHorror`, and `ResidentHorrorV1_GameInstance`. The player now includes an optional `FirstPersonCamera` that attaches at runtime to the Manny `CameraSocket` near eye level, active-camera accessors, guarded camera switching, full head/body visibility, a first-person override for the Manny camera-distance fade, and fixed FOV `90` while aiming in first person; see `docs/gameplay-systems.md`.
+- Player/game framework: `Character/BP_Character/BP_Resident_HorrorV1`, `BP_PlayerControllerResidentHorror`, `BP_PlayerModeResidentHorror`, and `ResidentHorrorV1_GameInstance`. The player now includes an optional `FirstPersonCamera` that attaches at runtime to the Manny `CameraSocket` near eye level, active-camera accessors, guarded camera switching, full head/body visibility, a first-person override for the Manny camera-distance fade, fixed FOV `90` while aiming in first person, and editable first-person-only upper-arm translation and rotation. `Blueprints/Dev/BP_FPV_PoseLabHarness` drives the isolated `Maps/Dev/Map_FPV_PoseLab` and opens `Blueprints/Dev/WBP_FPV_PoseTuner`, whose six live sliders tune translation X/Y/Z and rotation pitch/yaw/roll; see `docs/gameplay-systems.md`.
 - Input: `Input/IMC_Player` and actions for movement, look, jump, sprint, crouch, lean, interact, inventory, fire, reload, zoom, flashlight, pause, any-key handling, and `Input/Actions/IA_ToggleView` mapped to `T`. Preserve the template's existing runtime damage/debug behavior on `V`.
 - Interaction: `Blueprints/BP_Interact/BPC_Interact` and `BPI_Interact`, with `BP_Master_Interact` as the apparent reusable base.
 - Inventory/items: `Blueprints/BP_Inventory`, item/weapon data assets, `Blueprints/BP_Items`, and `Blueprints/WBP/WBP_Inventory`.
@@ -68,12 +69,16 @@ Important data-driven customization lives under `Blueprints/BP_CustomDataAssets`
 - Custom collision channels are `Interact`, `WeaponTrace`, and `Enemy`.
 - Footstep-related physical surfaces are `Metal`, `Water`, `Concret`, `Grass`, `Blood`, and `Wood`. `Concret` is the configured spelling; changing it may break asset references.
 - Packaging is configured for Shipping, distribution, compressed Pak/IoStore output, English localization, and map-only cooking.
-- The `.uproject` enables Unreal Engine 5.8's experimental `ModelContextProtocol` and `EditorToolset` plugins. Read `docs/unreal-mcp.md` before using or changing the integration.
+- The `.uproject` enables Unreal Engine 5.8's experimental `ModelContextProtocol`, `EditorToolset`, and `UMGToolSet` plugins, alongside `ClaudeUnrealMCP` and its required engine dependencies (`Chooser`, `StructUtils`, `EditorScriptingUtilities`, `StateTree`, `ProceduralMeshComponent`). `UMGToolSet` provides semantic Widget Blueprint tree creation and mutation so routine UMG layout work does not require visible UI automation. Read `docs/unreal-mcp.md` before using or changing the integration.
 - The `.uproject` explicitly disables WMFCodecs, ElectronicNodes, SkeletalMeshModelingTools, and Fab. Do not introduce a required plugin dependency without updating the project file and this guide.
 
 ## Unreal MCP
 
-The repository-scoped MCP setup, planned Epic-plus-custom dual-MCP strategy, available tool families, project-specific limitations, safety rules, and troubleshooting procedure are documented in `docs/unreal-mcp.md`. Consult that file before using MCP to mutate Blueprints, assets, actors, or maps. Keep the document synchronized with `.codex/config.toml`, `ResidentHorrorV1.uproject`, the custom MCP revision when installed, and the enabled Unreal toolsets.
+The dual-MCP strategy is active and operational:
+1. **Epic Native UE 5.8 MCP** (`http://127.0.0.1:8000/mcp`): Engine-native toolsets for standard editor inspection, asset queries, PIE control, and UMG tree mutations.
+2. **Custom ClaudeUnrealMCP** (`Plugins/ClaudeUnrealMCP`): C++ editor plugin listening on loopback TCP port `9877` via Node.js stdio bridge, providing 152 specialized tools for Blueprint graph editing, bone/pose manipulation, migration, component properties, animation, and level actors.
+
+Consult `docs/unreal-mcp.md` before using MCP to mutate Blueprints, WidgetTrees, assets, actors, or maps. Keep the document synchronized with `ResidentHorrorV1.uproject` and enabled toolsets.
 
 ## Working safely with Unreal assets
 
