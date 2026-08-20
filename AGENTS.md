@@ -44,8 +44,8 @@ The following map is based on current asset paths and names. Blueprint graphs re
 
 The detailed feature inventory, asset anchors, known gaps, and system-by-system PIE validation paths are maintained in `docs/gameplay-systems.md`. Update that document when a gameplay capability is added, removed, verified, or found to be incomplete.
 
-- Player/game framework: `Character/BP_Character/BP_Resident_HorrorV1`, `BP_PlayerControllerResidentHorror`, `BP_PlayerModeResidentHorror`, and `ResidentHorrorV1_GameInstance`.
-- Input: `Input/IMC_Player` and actions for movement, look, jump, sprint, crouch, lean, interact, inventory, fire, reload, zoom, flashlight, pause, and any-key handling.
+- Player/game framework: `Character/BP_Character/BP_Resident_HorrorV1`, `BP_PlayerControllerResidentHorror`, `BP_PlayerModeResidentHorror`, and `ResidentHorrorV1_GameInstance`. The player now includes an optional `FirstPersonCamera` that attaches at runtime to the Manny `CameraSocket` near eye level, active-camera accessors, guarded camera switching, full head/body visibility, a first-person override for the Manny camera-distance fade, and fixed FOV `90` while aiming in first person; see `docs/gameplay-systems.md`.
+- Input: `Input/IMC_Player` and actions for movement, look, jump, sprint, crouch, lean, interact, inventory, fire, reload, zoom, flashlight, pause, any-key handling, and `Input/Actions/IA_ToggleView` mapped to `T`. Preserve the template's existing runtime damage/debug behavior on `V`.
 - Interaction: `Blueprints/BP_Interact/BPC_Interact` and `BPI_Interact`, with `BP_Master_Interact` as the apparent reusable base.
 - Inventory/items: `Blueprints/BP_Inventory`, item/weapon data assets, `Blueprints/BP_Items`, and `Blueprints/WBP/WBP_Inventory`.
 - Weapons: `Blueprints/BP_Weapon`, including base weapon/pickup logic, ammo, projectiles, magazines, casings, pistol, shotgun variants, and AS VAL assets.

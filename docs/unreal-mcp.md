@@ -139,6 +139,12 @@ Use these checks in order:
 
 For protocol-level debugging, Epic recommends the MCP Inspector against `http://127.0.0.1:8000/mcp` using Streamable HTTP.
 
+### Visible editor automation fallback
+
+The Windows Computer Use bridge was verified operational with the live UE 5.8 editor on 2026-08-20. It can target the main `ResidentHorrorV1 - Unreal Editor` window and Blueprint editor child windows. Use it only for narrow, visible editor operations when the native MCP reader cannot traverse a collapsed/composite graph or when an asset editor workflow is safer than broad graph serialization.
+
+Do not use UI automation for terminal commands, broad asset saves, binary-file manipulation, or unattended destructive operations. Keep MCP or Unreal-native APIs responsible for structured inspection, compilation, verification, and precisely scoped saves.
+
 ## Adding more toolsets
 
 Enable specialized toolsets individually when a real task requires them. Likely candidates for this template are `AIModuleToolset`, `UMGToolSet`, `NiagaraToolsets`, `AnimationAssistantToolset`, and `AutomationTestToolset`.
