@@ -90,6 +90,7 @@ Consult `docs/unreal-mcp.md` before using MCP to mutate Blueprints, WidgetTrees,
 - After moving assets, fix up redirectors in the affected Content Browser folder, save dependent assets, and verify references before committing.
 - Do not commit files from ignored generated folders. Configuration changes that should be shared belong in `Config/`, not per-user files under `Saved/`.
 - Keep binary assets under Git LFS. Before committing a new binary format, check `.gitattributes` and add an LFS rule if needed.
+- Do not `git commit` (and never push) a gameplay-affecting Blueprint or asset change until the user has manually played through it themselves in a live PIE session and confirmed it looks/feels right. An agent's own PIE checks (simulated input, python state reads, screenshots) are for diagnosing and self-verifying during development, not a substitute for the user's manual pass before the change is committed. When a change is ready, stop and tell the user exactly which map to open, what to do, and what result confirms it's working, then wait for their go-ahead before committing.
 
 ## Validation checklist
 
