@@ -20,6 +20,7 @@ struct FSavedPinConnection
 };
 
 UClass* ResolveParentClass(const FString& ParentClassPath);
+UEdGraph* ResolveGraphChain(UBlueprint* Blueprint, const FString& GraphNameFilter, const TArray<FString>& NodeIdChain, FString& OutError);
 void SerializePinType(const FEdGraphPinType& PinType, TSharedPtr<FJsonObject>& OutObj);
 void SerializeProperty(const FProperty* Prop, TSharedPtr<FJsonObject>& OutObj);
 bool DoesBlueprintReferenceStruct(UBlueprint* Blueprint, UUserDefinedStruct* OldStruct);

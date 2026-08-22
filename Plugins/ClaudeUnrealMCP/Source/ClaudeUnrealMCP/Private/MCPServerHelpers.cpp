@@ -1,11 +1,135 @@
 #include "MCPServerHelpers.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
 #include "EdGraphSchema_K2.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "K2Node_SetFieldsInStruct.h"
 #include "K2Node_BreakStruct.h"
 #include "K2Node_MakeStruct.h"
+#include "K2Node_Composite.h"
+#include "AnimGraphNode_StateMachineBase.h"
+#include "AnimationStateMachineGraph.h"
+
+// Finds a top-level graph (Ubergraph/Function/Interface) optionally filtered by name, then
+// descends through a chain of K2Node_Composite NodeGuids into nested collapsed graphs.
+// If NodeIdChain is empty, GraphNameFilter must match a top-level graph exactly (legacy behavior).
+UEdGraph* ResolveGraphChain(UBlueprint* Blueprint, const FString& GraphNameFilter, const TArray<FString>& NodeIdChain, FString& OutError)
+{
+	if (!Blueprint)
+	{
+		OutError = TEXT("Blueprint is null");
+		return nullptr;
+	}
+
+	TArray<UEdGraph*> TopGraphs;
+	TopGraphs.Append(Blueprint->UbergraphPages);
+	TopGraphs.Append(Blueprint->FunctionGraphs);
+	for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
+	{
+		TopGraphs.Append(Interface.Graphs);
+	}
+
+	UEdGraph* CurrentGraph = nullptr;
+
+	if (NodeIdChain.Num() == 0)
+	{
+		for (UEdGraph* Candidate : TopGraphs)
+		{
+			if (Candidate && Candidate->GetName() == GraphNameFilter)
+			{
+				CurrentGraph = Candidate;
+				break;
+			}
+		}
+		if (!CurrentGraph)
+		{
+			OutError = FString::Printf(TEXT("Graph not found: %s"), *GraphNameFilter);
+		}
+		return CurrentGraph;
+	}
+
+	FGuid FirstGuid;
+	if (!FGuid::Parse(NodeIdChain[0], FirstGuid))
+	{
+		OutError = FString::Printf(TEXT("Invalid NodeGuid: %s"), *NodeIdChain[0]);
+		return nullptr;
+	}
+
+	for (UEdGraph* Candidate : TopGraphs)
+	{
+		if (!Candidate) continue;
+		if (!GraphNameFilter.IsEmpty() && Candidate->GetName() != GraphNameFilter) continue;
+
+		for (UEdGraphNode* Node : Candidate->Nodes)
+		{
+			if (Node && Node->NodeGuid == FirstGuid)
+			{
+				CurrentGraph = Candidate;
+				break;
+			}
+		}
+		if (CurrentGraph) break;
+	}
+
+	if (!CurrentGraph)
+	{
+		OutError = FString::Printf(TEXT("Could not find a top-level graph containing node id: %s"), *NodeIdChain[0]);
+		return nullptr;
+	}
+
+	for (const FString& IdStr : NodeIdChain)
+	{
+		FGuid TargetGuid;
+		if (!FGuid::Parse(IdStr, TargetGuid))
+		{
+			OutError = FString::Printf(TEXT("Invalid NodeGuid: %s"), *IdStr);
+			return nullptr;
+		}
+
+		UEdGraphNode* FoundNode = nullptr;
+		for (UEdGraphNode* Node : CurrentGraph->Nodes)
+		{
+			if (Node && Node->NodeGuid == TargetGuid)
+			{
+				FoundNode = Node;
+				break;
+			}
+		}
+
+		if (!FoundNode)
+		{
+			OutError = FString::Printf(TEXT("Node id %s not found in graph '%s'"), *IdStr, *CurrentGraph->GetName());
+			return nullptr;
+		}
+
+		if (UK2Node_Composite* FoundComposite = Cast<UK2Node_Composite>(FoundNode))
+		{
+			if (!FoundComposite->BoundGraph)
+			{
+				OutError = FString::Printf(TEXT("Composite node %s has no BoundGraph"), *IdStr);
+				return nullptr;
+			}
+			CurrentGraph = FoundComposite->BoundGraph;
+		}
+		else if (UAnimGraphNode_StateMachineBase* FoundStateMachine = Cast<UAnimGraphNode_StateMachineBase>(FoundNode))
+		{
+			if (!FoundStateMachine->EditorStateMachineGraph)
+			{
+				OutError = FString::Printf(TEXT("State machine node %s has no EditorStateMachineGraph"), *IdStr);
+				return nullptr;
+			}
+			CurrentGraph = FoundStateMachine->EditorStateMachineGraph;
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("Node id %s is not a K2Node_Composite or AnimGraphNode_StateMachine (class: %s)"), *IdStr, *FoundNode->GetClass()->GetName());
+			return nullptr;
+		}
+	}
+
+	return CurrentGraph;
+}
 
 UClass* ResolveParentClass(const FString& ParentClassPath)
 {

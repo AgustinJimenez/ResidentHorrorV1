@@ -185,6 +185,38 @@ export const MCP_TOOL_DEFINITIONS = [
         },
       },
       {
+        name: "read_collapsed_graph",
+        description:
+          "Read inside a Blueprint 'Collapsed Graph' (K2Node_Composite) OR an Animation Blueprint state machine (AnimGraphNode_StateMachine) that read_event_graph/read_function_graphs cannot see. Pass a chain of NodeGuid strings (from a 'Composite'-typed node's 'id' field, or an AnimGraphNode_StateMachine node's 'id') to descend through nested graphs/state machines. For a state machine, returned nodes include AnimStateEntryNode (its single connection is the current default entry state), AnimStateNode (one per state; its title is the state's name), and AnimStateTransitionNode.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path to the blueprint asset",
+            },
+            node_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Ordered list of NodeGuid strings (K2Node_Composite and/or AnimGraphNode_StateMachine) to descend through, starting from a top-level graph (e.g. 'AnimGraph' for an Animation Blueprint)",
+            },
+            graph_name: {
+              type: "string",
+              description: "Optional top-level graph name to search first (e.g. 'EventGraph' or a function name)",
+            },
+            max_nodes: {
+              type: "integer",
+              description: "Optional max nodes to return",
+            },
+            start_index: {
+              type: "integer",
+              description: "Optional start index into graph nodes (pagination)",
+            },
+          },
+          required: ["path", "node_ids"],
+        },
+      },
+      {
         name: "read_timelines",
         description: "Read timeline templates, tracks, and keys from a blueprint",
         inputSchema: {
@@ -459,6 +491,28 @@ export const MCP_TOOL_DEFINITIONS = [
       {
         name: "add_input_mapping",
         description: "Add a key mapping to an input mapping context",
+        inputSchema: {
+          type: "object",
+          properties: {
+            context_path: {
+              type: "string",
+              description: "Full path to the input mapping context asset",
+            },
+            action_path: {
+              type: "string",
+              description: "Full path to the input action asset",
+            },
+            key: {
+              type: "string",
+              description: "Key name (e.g., O, SpaceBar, LeftMouseButton)",
+            },
+          },
+          required: ["context_path", "action_path", "key"],
+        },
+      },
+      {
+        name: "remove_input_mapping",
+        description: "Remove a key mapping from an input mapping context",
         inputSchema: {
           type: "object",
           properties: {
@@ -1116,10 +1170,109 @@ export const MCP_TOOL_DEFINITIONS = [
             },
             graph_name: {
               type: "string",
-              description: "Name of the graph to modify (default: 'EventGraph'). Use for function graphs or other named graphs.",
+              description: "Name of the graph to modify (default: 'EventGraph'). Use for function graphs or other named graphs. Ignored when node_ids is provided.",
+            },
+            node_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Ordered list of K2Node_Composite NodeGuid strings to descend into a nested collapsed graph before connecting (see read_collapsed_graph). Omit to target a top-level graph via graph_name.",
             },
           },
           required: ["blueprint_path", "source_node_id", "source_pin", "target_node_id", "target_pin"],
+        },
+      },
+      {
+        name: "create_node",
+        description: "Create a new node (Branch, CallFunction, VariableGet, VariableSet, or CustomEvent) in a blueprint graph, including nested Collapsed Graphs via node_ids. Returns the new node's id and pins so it can be wired with connect_nodes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path to the blueprint asset",
+            },
+            node_type: {
+              type: "string",
+              enum: ["Branch", "CallFunction", "VariableGet", "VariableSet", "CustomEvent"],
+              description: "Kind of node to create",
+            },
+            graph_name: {
+              type: "string",
+              description: "Top-level graph name (default 'EventGraph'). Ignored when node_ids is provided.",
+            },
+            node_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Ordered list of K2Node_Composite NodeGuid strings to descend into a nested collapsed graph (see read_collapsed_graph).",
+            },
+            function_name: {
+              type: "string",
+              description: "Required for node_type=CallFunction. UFunction name, e.g. 'Delay', 'RetriggerableDelay', or a Blueprint custom event name.",
+            },
+            function_owner_class: {
+              type: "string",
+              description: "Optional for CallFunction: class path owning the function (e.g. '/Script/Engine.KismetSystemLibrary'). If omitted, searches the blueprint's own class, then KismetSystemLibrary.",
+            },
+            variable_name: {
+              type: "string",
+              description: "Required for node_type=VariableGet/VariableSet. Must already exist (see add_variable).",
+            },
+            event_name: {
+              type: "string",
+              description: "Required for node_type=CustomEvent. The new custom event's name.",
+            },
+          },
+          required: ["path", "node_type"],
+        },
+      },
+      {
+        name: "set_anim_state_machine_entry",
+        description: "Change which state an Animation Blueprint state machine starts in by rewiring its AnimStateEntryNode to point at a different state. Use read_collapsed_graph on the state machine first to find the AnimStateEntryNode's current target and the target state's NodeGuid.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path to the (Animation) Blueprint asset",
+            },
+            node_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Ordered list of NodeGuid strings (e.g. the AnimGraphNode_StateMachine's id, possibly preceded by K2Node_Composite ids) leading to the target state machine graph, same as read_collapsed_graph",
+            },
+            target_state_node_id: {
+              type: "string",
+              description: "NodeGuid of the AnimStateNode (or conduit) that should become the new entry/default state",
+            },
+          },
+          required: ["path", "node_ids", "target_state_node_id"],
+        },
+      },
+      {
+        name: "add_variable",
+        description: "Add a new member variable (bool, float, or int) to a Blueprint.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path to the blueprint asset",
+            },
+            name: {
+              type: "string",
+              description: "New variable name",
+            },
+            type: {
+              type: "string",
+              enum: ["bool", "float", "int"],
+              description: "Variable type",
+            },
+            default_value: {
+              type: "string",
+              description: "Optional default value as text (e.g. 'true', '2.0', '0')",
+            },
+          },
+          required: ["path", "name", "type"],
         },
       },
       {
@@ -1539,7 +1692,12 @@ export const MCP_TOOL_DEFINITIONS = [
             },
             graph_name: {
               type: "string",
-              description: "Name of the graph containing the node. Default: EventGraph",
+              description: "Name of a top-level graph containing the node (Ubergraph, Function, or Interface graph). Default: EventGraph. Ignored when node_ids is provided.",
+            },
+            node_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "Ordered list of NodeGuid strings (K2Node_Composite and/or AnimGraphNode_StateMachine) to descend into a nested collapsed graph before deleting.",
             },
           },
           required: ["blueprint_path", "node_id"],
@@ -2169,6 +2327,33 @@ export const MCP_TOOL_DEFINITIONS = [
           properties: {
             operation: { type: "string", description: "start, stop, or status (default: status)" },
           },
+        },
+      },
+      {
+        name: "simulate_input_key",
+        description: "Simulate a key/button press or release in a running PIE session via PlayerController::InputKey (the same mechanism Epic's own automation tests use). Requires PIE to already be running (play_in_editor start). Works with Enhanced Input actions since PlayerInput's key state feeds the Enhanced Input subsystem.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            key: {
+              type: "string",
+              description: "FKey name, e.g. 'LeftMouseButton', 'RightMouseButton', 'Z', 'SpaceBar'",
+            },
+            event: {
+              type: "string",
+              enum: ["Pressed", "Released", "Repeat"],
+              description: "Input event type",
+            },
+            value: {
+              type: "number",
+              description: "Optional analog amount depressed (default 1.0)",
+            },
+            player_index: {
+              type: "integer",
+              description: "Optional local player index (default 0)",
+            },
+          },
+          required: ["key", "event"],
         },
       },
       {

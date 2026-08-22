@@ -404,6 +404,13 @@ Implemented the next tuning pass with no third-person pose change:
 
 PIE validation in `Map_FPV_PoseLab` confirmed that the panel, cursor, axis tooltips, pistol, crouched first-person state, and auto-walk all appear together. A follow-up test found that the first graph placement was upstream of `Blend Poses by Bool (Using Weapon?)`; the equipped pistol selected the other pose and completely bypassed the slider-driven nodes even though the runtime values and pins were correct. Moving the two upper-arm Modify Bone nodes after the weapon/flashlight selections fixed the fault. At Y approximately `-73` the weapon exits the view, while at Y approximately `+73` the pistol and both hands move clearly into view, proving useful full-range response. The Reset flow was separately verified by changing Translation X to approximately `67` and restoring the full default translation and rotation in one click. Tuned values `(X=-8.435, Y=17.298, Z=16.190)` and `(Pitch=0.0, Yaw=6.0, Roll=7.705933)` were applied directly to the player Blueprint Class Defaults and saved.
 
+### Dual-pose tuning, laser diagnostics, and orbit inspection camera
+
+- **Dual-Pose Tuning (Hip/Walk vs Aim)**: Added separate Aim mode tuning support in `WBP_FPV_PoseTuner` and mapped `Z` to `IA_Zoom` in `IMC_Player` so players can seamlessly raise the pistol into Aim Down Sights (ADS) to dial in sights alignment.
+- **Weapon Diagnostics**: Enabled `Have laser?` and `Debug Line Trace?` on `BP_Base_Weapon` and `BP_Pistol` to draw real-time muzzle trajectory lines. Added a 3x-width `TargetWall` backdrop at `X=600` in `BP_FPV_PoseLabHarness`.
+- **Orbit / Pose Inspection Cam**: Added `PoseCamSpringArm` (centered at chest height `Z=135`) and `PoseCam` to `BP_Resident_HorrorV1`. Added an `Orbit Zoom` slider (`30cm` to `300cm`) to `WBP_FPV_PoseTuner` to allow 360-degree close-up inspection of character hand placement and bore alignment from any angle during live tuning.
+- **Weapon Fire Rules**: Documented the template's classic survival-horror aim-to-fire mechanic (`IA_Fire` guarded by `Zoomed?`) in `docs/gameplay-systems.md`.
+
 ## Definition of done for the first slice
 
 - [x] Third person remains the default and its existing camera/spring-arm defaults are intact.

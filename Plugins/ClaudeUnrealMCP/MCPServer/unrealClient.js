@@ -19,17 +19,14 @@ export async function sendToUnreal(command, params = {}) {
     client.on("data", (chunk) => {
       data += chunk.toString("utf8");
       if (data.endsWith("\n")) {
-        client.destroy();
+        const trimmed = data.trim();
         try {
-          const trimmed = data.trim();
+          const parsed = JSON.parse(trimmed);
+          client.destroy();
           console.error(`Received ${trimmed.length} bytes from Unreal Engine`);
-          resolve(JSON.parse(trimmed));
+          resolve(parsed);
         } catch {
-          const preview =
-            data.length > 1000
-              ? `${data.substring(0, 1000)}... (truncated for display)`
-              : data;
-          reject(new Error(`Invalid JSON response (${data.length} bytes): ${preview}`));
+          // Response not complete yet (newline inside string or payload truncated across chunks), keep accumulating
         }
       }
     });

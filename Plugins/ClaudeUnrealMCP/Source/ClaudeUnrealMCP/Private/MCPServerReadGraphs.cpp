@@ -14,6 +14,7 @@
 #include "K2Node_DynamicCast.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "K2Node_Composite.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -305,6 +306,216 @@ FString FMCPServer::HandleReadEventGraphDetailed(const TSharedPtr<FJsonObject>& 
 	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 	Data->SetArrayField(TEXT("graphs"), GraphsArray);
 	Data->SetNumberField(TEXT("count"), GraphsArray.Num());
+
+	return MakeResponse(true, Data);
+}
+
+static void SerializeGraphNodesDetailed(UEdGraph* Graph, int32 MaxNodes, int32 StartIndex, TArray<TSharedPtr<FJsonValue>>& NodesArray)
+{
+	int32 NodeIndex = 0;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (!Node) continue;
+		if (NodeIndex++ < StartIndex) continue;
+		if (MaxNodes >= 0 && NodesArray.Num() >= MaxNodes) break;
+
+		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+		NodeObj->SetStringField(TEXT("id"), Node->NodeGuid.ToString());
+		NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+
+		if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node))
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("Event"));
+			NodeObj->SetStringField(TEXT("event_name"), EventNode->GetFunctionName().ToString());
+		}
+		else if (UK2Node_CallFunction* FuncNode = Cast<UK2Node_CallFunction>(Node))
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("FunctionCall"));
+			NodeObj->SetStringField(TEXT("function_name"), FuncNode->GetFunctionName().ToString());
+		}
+		else if (UK2Node_VariableGet* GetNode = Cast<UK2Node_VariableGet>(Node))
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("VariableGet"));
+			NodeObj->SetStringField(TEXT("variable_name"), GetNode->GetVarName().ToString());
+		}
+		else if (UK2Node_VariableSet* SetNode = Cast<UK2Node_VariableSet>(Node))
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("VariableSet"));
+			NodeObj->SetStringField(TEXT("variable_name"), SetNode->GetVarName().ToString());
+		}
+		else if (UK2Node_Composite* CompositeNode = Cast<UK2Node_Composite>(Node))
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("Composite"));
+			if (CompositeNode->BoundGraph)
+			{
+				NodeObj->SetStringField(TEXT("bound_graph_name"), CompositeNode->BoundGraph->GetName());
+			}
+		}
+		else
+		{
+			NodeObj->SetStringField(TEXT("type"), TEXT("Other"));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> PinsArray;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin) continue;
+
+			TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
+			PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
+			PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
+
+			TSharedPtr<FJsonObject> PinTypeObj = MakeShared<FJsonObject>();
+			SerializePinType(Pin->PinType, PinTypeObj);
+			PinObj->SetObjectField(TEXT("type"), PinTypeObj);
+
+			if (!Pin->DefaultValue.IsEmpty())
+			{
+				PinObj->SetStringField(TEXT("default_value"), Pin->DefaultValue);
+			}
+
+			if (!Pin->DefaultTextValue.IsEmpty())
+			{
+				PinObj->SetStringField(TEXT("default_text"), Pin->DefaultTextValue.ToString());
+			}
+
+			if (Pin->DefaultObject)
+			{
+				PinObj->SetStringField(TEXT("default_object"), Pin->DefaultObject->GetPathName());
+			}
+
+			PinObj->SetBoolField(TEXT("is_linked"), Pin->LinkedTo.Num() > 0);
+
+			PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
+		}
+		NodeObj->SetArrayField(TEXT("pins"), PinsArray);
+
+		TArray<TSharedPtr<FJsonValue>> ConnectionsArray;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Output) continue;
+
+			for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+			{
+				if (!LinkedPin || !LinkedPin->GetOwningNode()) continue;
+
+				TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+				ConnObj->SetStringField(TEXT("from_pin"), Pin->PinName.ToString());
+				ConnObj->SetStringField(TEXT("to_node"), LinkedPin->GetOwningNode()->NodeGuid.ToString());
+				ConnObj->SetStringField(TEXT("to_pin"), LinkedPin->PinName.ToString());
+				ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+			}
+		}
+		NodeObj->SetArrayField(TEXT("connections"), ConnectionsArray);
+
+		NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+	}
+}
+
+FString FMCPServer::HandleReadCollapsedGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid() || !Params->HasField(TEXT("path")))
+	{
+		return MakeError(TEXT("Missing 'path' parameter"));
+	}
+	if (!Params->HasField(TEXT("node_ids")))
+	{
+		return MakeError(TEXT("Missing 'node_ids' parameter (array of K2Node_Composite NodeGuid strings to descend through, in order)"));
+	}
+
+	const FString Path = Params->GetStringField(TEXT("path"));
+	const int32 MaxNodes = Params->HasField(TEXT("max_nodes")) ? Params->GetIntegerField(TEXT("max_nodes")) : -1;
+	const int32 StartIndex = Params->HasField(TEXT("start_index")) ? Params->GetIntegerField(TEXT("start_index")) : 0;
+	const FString GraphNameFilter = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : FString();
+
+	UBlueprint* Blueprint = LoadBlueprintFromPath(Path);
+	if (!Blueprint)
+	{
+		return MakeError(FString::Printf(TEXT("Blueprint not found: %s"), *Path));
+	}
+
+	TArray<FString> NodeIdChain;
+	for (const TSharedPtr<FJsonValue>& Value : Params->GetArrayField(TEXT("node_ids")))
+	{
+		NodeIdChain.Add(Value->AsString());
+	}
+	if (NodeIdChain.Num() == 0)
+	{
+		return MakeError(TEXT("'node_ids' must contain at least one NodeGuid string"));
+	}
+
+	// Candidate top-level graphs to start the search from.
+	TArray<UEdGraph*> TopGraphs;
+	TopGraphs.Append(Blueprint->UbergraphPages);
+	TopGraphs.Append(Blueprint->FunctionGraphs);
+	for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
+	{
+		TopGraphs.Append(Interface.Graphs);
+	}
+
+	UEdGraph* CurrentGraph = nullptr;
+	FGuid FirstGuid;
+	FGuid::Parse(NodeIdChain[0], FirstGuid);
+
+	for (UEdGraph* Candidate : TopGraphs)
+	{
+		if (!Candidate) continue;
+		if (!GraphNameFilter.IsEmpty() && Candidate->GetName() != GraphNameFilter) continue;
+
+		for (UEdGraphNode* Node : Candidate->Nodes)
+		{
+			if (Node && Node->NodeGuid == FirstGuid)
+			{
+				CurrentGraph = Candidate;
+				break;
+			}
+		}
+		if (CurrentGraph) break;
+	}
+
+	if (!CurrentGraph)
+	{
+		return MakeError(FString::Printf(TEXT("Could not find a top-level graph containing node id: %s"), *NodeIdChain[0]));
+	}
+
+	for (const FString& IdStr : NodeIdChain)
+	{
+		FGuid TargetGuid;
+		if (!FGuid::Parse(IdStr, TargetGuid))
+		{
+			return MakeError(FString::Printf(TEXT("Invalid NodeGuid: %s"), *IdStr));
+		}
+
+		UK2Node_Composite* FoundComposite = nullptr;
+		for (UEdGraphNode* Node : CurrentGraph->Nodes)
+		{
+			if (Node && Node->NodeGuid == TargetGuid)
+			{
+				FoundComposite = Cast<UK2Node_Composite>(Node);
+				break;
+			}
+		}
+
+		if (!FoundComposite)
+		{
+			return MakeError(FString::Printf(TEXT("Node id %s not found in graph '%s', or it is not a K2Node_Composite"), *IdStr, *CurrentGraph->GetName()));
+		}
+		if (!FoundComposite->BoundGraph)
+		{
+			return MakeError(FString::Printf(TEXT("Composite node %s has no BoundGraph"), *IdStr));
+		}
+
+		CurrentGraph = FoundComposite->BoundGraph;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> NodesArray;
+	SerializeGraphNodesDetailed(CurrentGraph, MaxNodes, StartIndex, NodesArray);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("graph_name"), CurrentGraph->GetName());
+	Data->SetArrayField(TEXT("nodes"), NodesArray);
+	Data->SetNumberField(TEXT("node_count"), NodesArray.Num());
 
 	return MakeResponse(true, Data);
 }

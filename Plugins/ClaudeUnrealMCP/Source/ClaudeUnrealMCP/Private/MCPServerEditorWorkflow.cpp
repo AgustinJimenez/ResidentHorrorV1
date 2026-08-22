@@ -12,6 +12,9 @@
 #include "Editor/UnrealEdEngine.h"
 #include "LevelEditorViewport.h"
 #include "SLevelViewport.h"
+#include "GameFramework/PlayerController.h"
+#include "InputKeyEventArgs.h"
+#include "Kismet/GameplayStatics.h"
 
 // ===== PIE CONTROL =====
 
@@ -58,6 +61,53 @@ FString FMCPServer::HandlePlayInEditor(const TSharedPtr<FJsonObject>& Params)
 	}
 
 	return MakeError(FString::Printf(TEXT("Unknown operation: %s (use start, stop, or status)"), *Op));
+}
+
+// ===== SIMULATED INPUT (PIE testing) =====
+
+FString FMCPServer::HandleSimulateInputKey(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid() || !Params->HasField(TEXT("key")) || !Params->HasField(TEXT("event")))
+	{
+		return MakeError(TEXT("Missing required parameters: key, event"));
+	}
+
+	const FString KeyName = Params->GetStringField(TEXT("key"));
+	const FString EventStr = Params->GetStringField(TEXT("event"));
+	const float AmountDepressed = Params->HasField(TEXT("value")) ? Params->GetNumberField(TEXT("value")) : 1.0f;
+	const int32 PlayerIndex = Params->HasField(TEXT("player_index")) ? Params->GetIntegerField(TEXT("player_index")) : 0;
+
+	if (!GEditor->PlayWorld)
+	{
+		return MakeError(TEXT("No PIE session is running. Start Play In Editor first."));
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GEditor->PlayWorld.Get(), PlayerIndex);
+	if (!PC)
+	{
+		return MakeError(FString::Printf(TEXT("No player controller found at index %d in the PIE world"), PlayerIndex));
+	}
+
+	const FKey Key(*KeyName);
+	if (!Key.IsValid())
+	{
+		return MakeError(FString::Printf(TEXT("Invalid key name: %s"), *KeyName));
+	}
+
+	EInputEvent InputEvent;
+	if (EventStr == TEXT("Pressed")) InputEvent = IE_Pressed;
+	else if (EventStr == TEXT("Released")) InputEvent = IE_Released;
+	else if (EventStr == TEXT("Repeat")) InputEvent = IE_Repeat;
+	else return MakeError(TEXT("'event' must be 'Pressed', 'Released', or 'Repeat'"));
+
+	const FInputKeyEventArgs Args = FInputKeyEventArgs::CreateSimulated(Key, InputEvent, AmountDepressed);
+	const bool bHandled = PC->InputKey(Args);
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("key"), KeyName);
+	Data->SetStringField(TEXT("event"), EventStr);
+	Data->SetBoolField(TEXT("handled"), bHandled);
+	return MakeResponse(true, Data);
 }
 
 // ===== CONSOLE COMMAND =====

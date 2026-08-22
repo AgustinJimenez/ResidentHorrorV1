@@ -55,6 +55,7 @@
 #include "EnhancedInputComponent.h"
 #include "Components/ActorComponent.h"
 #include "Kismet2/ComponentEditorUtils.h"
+#include "MCPServerHelpers.h"
 
 FString FMCPServer::HandleDeleteNode(const TSharedPtr<FJsonObject>& Params)
 {
@@ -74,20 +75,21 @@ FString FMCPServer::HandleDeleteNode(const TSharedPtr<FJsonObject>& Params)
 		return MakeError(FString::Printf(TEXT("Failed to load blueprint: %s"), *BlueprintPath));
 	}
 
-	// Find the target graph
-	UEdGraph* TargetGraph = nullptr;
-	for (UEdGraph* Graph : Blueprint->UbergraphPages)
+	TArray<FString> NodeIdChain;
+	if (Params->HasField(TEXT("node_ids")))
 	{
-		if (Graph && Graph->GetName() == GraphName)
+		for (const TSharedPtr<FJsonValue>& Value : Params->GetArrayField(TEXT("node_ids")))
 		{
-			TargetGraph = Graph;
-			break;
+			NodeIdChain.Add(Value->AsString());
 		}
 	}
 
+	FString ResolveError;
+	UEdGraph* TargetGraph = ResolveGraphChain(Blueprint, NodeIdChain.Num() > 0 ? FString() : GraphName, NodeIdChain, ResolveError);
+
 	if (!TargetGraph)
 	{
-		return MakeError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+		return MakeError(ResolveError);
 	}
 
 	// Find the node by GUID

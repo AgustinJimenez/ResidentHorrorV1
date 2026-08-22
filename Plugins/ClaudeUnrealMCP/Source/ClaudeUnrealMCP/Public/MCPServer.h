@@ -30,6 +30,7 @@ private:
 	FString HandleReadEventGraph(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadEventGraphDetailed(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadFunctionGraphs(const TSharedPtr<FJsonObject>& Params);
+	FString HandleReadCollapsedGraph(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadTimelines(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadInterface(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadUserDefinedStruct(const TSharedPtr<FJsonObject>& Params);
@@ -48,6 +49,7 @@ private:
 	FString HandleReplaceComponentMapValue(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReplaceBlueprintArrayValue(const TSharedPtr<FJsonObject>& Params);
 	FString HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params);
+	FString HandleRemoveInputMapping(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReparentBlueprint(const TSharedPtr<FJsonObject>& Params);
 	FString HandleCompileBlueprint(const TSharedPtr<FJsonObject>& Params);
 	FString HandleSaveAsset(const TSharedPtr<FJsonObject>& Params);
@@ -95,6 +97,9 @@ private:
 	FString HandleDisconnectPin(const TSharedPtr<FJsonObject>& Params);
 	FString HandleAddSetStructNode(const TSharedPtr<FJsonObject>& Params);
 	FString HandleDeleteNode(const TSharedPtr<FJsonObject>& Params);
+	FString HandleCreateNode(const TSharedPtr<FJsonObject>& Params);
+	FString HandleAddVariable(const TSharedPtr<FJsonObject>& Params);
+	FString HandleSetAnimStateMachineEntry(const TSharedPtr<FJsonObject>& Params);
 
 	// Input system reading (Sprint 6)
 	FString HandleReadInputMappingContext(const TSharedPtr<FJsonObject>& Params);
@@ -179,6 +184,7 @@ private:
 
 	// PIE + Editor Workflow (Sprint 16)
 	FString HandlePlayInEditor(const TSharedPtr<FJsonObject>& Params);
+	FString HandleSimulateInputKey(const TSharedPtr<FJsonObject>& Params);
 	FString HandleExecuteConsoleCommand(const TSharedPtr<FJsonObject>& Params);
 	FString HandleReadLog(const TSharedPtr<FJsonObject>& Params);
 	FString HandleGetEngineVersion(const TSharedPtr<FJsonObject>& Params);

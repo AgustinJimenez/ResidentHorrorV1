@@ -158,6 +158,12 @@ Weapon implementations:
 
 Matching inventory data assets and ammunition pickups exist for the pistol, both shotgun naming variants, and AS VAL. Supporting assets include physical and standard magazines, pistol/shotgun casings, weapon camera shakes, laser and flashlight actors, and weapon-specific sound/FX customization data.
 
+### Weapon firing rules and diagnostics
+
+- **Aim-Guarded Fire vs Hip-Fire**: The template enforces classic survival-horror weapon mechanics where firing (`IA_Fire` / LMB) is guarded by the aiming state (`Zoomed?`). The character cannot pull the trigger unless actively aiming down sights (via Right Mouse Button or `Z`).
+- **Laser Sight & Line Trace Diagnostics**: `BP_Base_Weapon` and `BP_Pistol` include built-in `Have laser?` and `Debug Line Trace?` booleans. When enabled, `BPC_Base_Weapon` draws a real-time trajectory beam straight from the weapon's barrel to visually verify muzzle bore alignment with the camera focus point.
+- **Dual-Pose & Orbit Inspection Cam**: `BP_Resident_HorrorV1` supports separate hand-pose offsets for Hip/Walk and Aim Down Sights. `PoseCamSpringArm` and `PoseCam` provide a 360-degree close-up orbit camera centered at chest height (`Z=135`), tunable from 30 cm to 300 cm via `WBP_FPV_PoseTuner`'s `Cam Zoom` slider.
+
 The animation library includes pistol, shotgun, and rifle/AS VAL aiming, fire, and reload sequences or montages. The presence of both generic weapon animations and character weapon animations means montage ownership and skeleton compatibility must be checked before replacing either set.
 
 Validation path:

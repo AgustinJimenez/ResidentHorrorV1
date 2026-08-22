@@ -107,6 +107,49 @@ FString FMCPServer::HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params)
 }
 
 
+FString FMCPServer::HandleRemoveInputMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return MakeError(TEXT("Missing parameters"));
+	}
+
+	FString ContextPath = Params->GetStringField(TEXT("context_path"));
+	FString ActionPath = Params->GetStringField(TEXT("action_path"));
+	FString KeyName = Params->GetStringField(TEXT("key"));
+
+	if (ContextPath.IsEmpty() || ActionPath.IsEmpty() || KeyName.IsEmpty())
+	{
+		return MakeError(TEXT("Missing context_path, action_path, or key"));
+	}
+
+	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *ContextPath);
+	if (!Context)
+	{
+		return MakeError(FString::Printf(TEXT("Input mapping context not found: %s"), *ContextPath));
+	}
+
+	UInputAction* Action = LoadObject<UInputAction>(nullptr, *ActionPath);
+	if (!Action)
+	{
+		return MakeError(FString::Printf(TEXT("Input action not found: %s"), *ActionPath));
+	}
+
+	FKey Key(*KeyName);
+	if (!Key.IsValid())
+	{
+		return MakeError(FString::Printf(TEXT("Invalid key: %s"), *KeyName));
+	}
+
+	Context->UnmapKey(Action, Key);
+	Context->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+	Data->SetStringField(TEXT("message"), FString::Printf(TEXT("Unmapped %s from %s in %s"), *KeyName, *Action->GetName(), *Context->GetName()));
+
+	return MakeResponse(true, Data);
+}
+
 FString FMCPServer::HandleReadInputMappingContext(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path = Params->GetStringField(TEXT("path"));
